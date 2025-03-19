@@ -1,0 +1,23 @@
+Fields for parity:
+
+- Invoice ID: Add to metadata
+- Status
+
+-- Amount fields
+- Amount
+- Subtotal
+- Total Discount
+- Total
+- Amount Paid - if status=paid, this value should equal the Total. If status != paid this value should equal 0
+
+- Collection_method = send_invoice
+- Currency
+- Date/Due Date: Not sure if possible
+
+- Invoice_number
+
+Fields for mapping:
+- Customer: (map according to sheet)
+- Product ID: Mappings in sheet
+- Subscription ID: Mappings to come in sheet
+- Price/Plan ID: Mappings to come in sheet
