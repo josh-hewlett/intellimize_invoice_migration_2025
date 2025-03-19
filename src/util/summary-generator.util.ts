@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import Stripe from 'stripe';
-
+import { FileManager } from './file-manager.util';
 // Global configuration
 const CSV_FILENAME = 'stripe_invoice_comparison.csv';
 const CSV_PATH = path.join(process.cwd(), 'output', CSV_FILENAME);
@@ -180,56 +180,41 @@ function getTransformedValue(field: FieldDefinition, value: any): any {
     return field.transform(value);
 }
 
-/**
- * Compares original and migrated Stripe invoices and writes the comparison to a CSV file
- * @param originalInvoice The original Stripe invoice
- * @param migratedInvoice The migrated Stripe invoice
- */
-export function compareInvoices(
-    originalInvoice: Stripe.Invoice,
-    migratedInvoice: Stripe.Invoice
-): void {
-    // Initialize CSV file if it doesn't exist
-    const dir = path.dirname(CSV_PATH);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+
+export class SummaryGenerator {
+
+    /**
+     * Compares original and migrated Stripe invoices and writes the comparison to a CSV file
+     * @param originalInvoice The original Stripe invoice
+     * @param migratedInvoice The migrated Stripe invoice
+     */
+    static addResultToSummaryFile(
+        fileName: string,
+        originalInvoice: Stripe.Invoice,
+        migratedInvoice: Stripe.Invoice
+    ): void {
+
+        // Prepare CSV rows
+        let headerRow: string[] = [];
+        let originalRow: string[] = [];
+        let migratedRow: string[] = [];
+        let validationRow: string[] = [];
+
+        // For each field, create four rows: title, original value, migrated value, and validation result
+        FIELDS_TO_COMPARE.forEach(field => {
+            const originalValue = getNestedValue(originalInvoice, field.path);
+            const migratedValue = getNestedValue(migratedInvoice, field.path);
+            const validationResult = getValidationResult(field, originalValue, migratedValue);
+
+            headerRow.push(field.title);
+            originalRow.push(getTransformedValue(field, originalValue));
+            migratedRow.push(getTransformedValue(field, migratedValue));
+            validationRow.push(validationResult);
+        });
+
+        const fileContent = [headerRow.join(','), originalRow.join(','), migratedRow.join(','), validationRow.join(',')].join('\n');
+
+        // Write rows to CSV file
+        FileManager.appendToFile(fileName, fileContent + '\n\n');
     }
-
-    // Write header if file doesn't exist
-    if (!fs.existsSync(CSV_PATH)) {
-        fs.writeFileSync(CSV_PATH, '');
-    }
-
-    // Prepare CSV rows
-
-    let headerRow: string[] = [];
-    let originalRow: string[] = [];
-    let migratedRow: string[] = [];
-    let validationRow: string[] = [];
-
-    // For each field, create four rows: title, original value, migrated value, and validation result
-    FIELDS_TO_COMPARE.forEach(field => {
-        const originalValue = getNestedValue(originalInvoice, field.path);
-        const migratedValue = getNestedValue(migratedInvoice, field.path);
-        const validationResult = getValidationResult(field, originalValue, migratedValue);
-
-        headerRow.push(field.title);
-        originalRow.push(getTransformedValue(field, originalValue));
-        migratedRow.push(getTransformedValue(field, migratedValue));
-        validationRow.push(validationResult);
-    });
-
-    const fileContent = [headerRow.join(','), originalRow.join(','), migratedRow.join(','), validationRow.join(',')].join('\n');
-
-    // Write rows to CSV file
-    fs.appendFileSync(CSV_PATH, fileContent + '\n\n');
-}
-
-export function intializeComparisonFile(): void {
-    const dir = path.dirname(CSV_PATH);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(CSV_PATH, '');
 }
