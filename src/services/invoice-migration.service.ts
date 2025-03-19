@@ -99,7 +99,8 @@ export class InvoiceMigrationService {
         draftMigratedInvoice = await this.destinationStripe.invoices.addLines(draftMigratedInvoice.id, transformedLineItems);
 
         // Pay the invoice in the destination account
-        let paidInvoice = await payInvoice(this.destinationStripe, draftMigratedInvoice);
+        // let paidInvoice = await payInvoice(this.destinationStripe, draftMigratedInvoice);
+        let paidInvoice = draftMigratedInvoice;
 
         // Record the migration result
         this.migrationResultsRecorder.recordMigrationResult(originalInvoice, paidInvoice);

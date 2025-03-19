@@ -14,6 +14,26 @@ function validateEqual(original: any, migrated: any): boolean {
     return original === migrated;
 }
 
+function validatePriceMapping(original: any, migrated: any): boolean {
+    // TODO: Implement price mapping validation
+    return true;
+}
+
+function validateProductMapping(original: any, migrated: any): boolean {
+    // TODO: Implement product mapping validation
+    return true;
+}
+
+function validateSubscriptionMapping(original: any, migrated: any): boolean {
+    // TODO: Implement subscription mapping validation
+    return true;
+}
+
+function validateCustomerMapping(original: any, migrated: any): boolean {
+    // TODO: Implement customer mapping validation
+    return true;
+}
+
 /*
  * Transformers
  */
@@ -36,10 +56,11 @@ type FieldDefinition = {
     path: string;
     validate?: (original: any, migrated: any) => boolean;
     transform?: (value: any) => any;
+    fieldValueAccumulator?: (value: any[]) => any;
 };
 
 // Fields to extract and compare
-const FIELDS_TO_COMPARE: FieldDefinition[] = [
+const TOP_LEVEL_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Invoice ID',
         path: 'id'
@@ -121,13 +142,11 @@ const FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Period Start',
         path: 'period_start',
-        validate: validateEqual,
         transform: transformEpochSecondsToDate
     },
     {
         title: 'Period End',
         path: 'period_end',
-        validate: validateEqual,
         transform: transformEpochSecondsToDate
     },
     {
@@ -164,9 +183,79 @@ const FIELDS_TO_COMPARE: FieldDefinition[] = [
     }
 ];
 
+const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
+    {
+        title: 'ID',
+        path: 'id'
+    },
+    {
+        title: 'Description',
+        path: 'description'
+    },
+    {
+        title: 'Price ID',
+        path: 'price.id',
+        validate: validatePriceMapping
+    },
+    {
+        title: 'Product ID',
+        path: 'price.product',
+        validate: validateProductMapping
+    },
+    {
+        title: 'Amount',
+        path: 'amount',
+        transform: transformCurrencyValueToString,
+        validate: validateEqual
+    },
+    {
+        title: 'Quantity',
+        path: 'quantity',
+        validate: validateEqual
+    },
+    {
+        title: 'Price Unit Amount',
+        path: 'price.unit_amount',
+        transform: transformCurrencyValueToString,
+        validate: validateEqual
+    },
+    {
+        title: 'Total Tax Amount',
+        path: 'taxes',
+        fieldValueAccumulator: (value: any[]) => value.reduce((acc: number, tax: any) => acc + tax.amount, 0),
+        transform: transformCurrencyValueToString,
+        validate: validateEqual
+    },
+    {
+        title: 'Total Discount Amount',
+        path: 'discounts',
+        fieldValueAccumulator: (value: any[]) => value.reduce((acc: number, discount: any) => acc + discount.amount, 0),
+        transform: transformCurrencyValueToString,
+        validate: validateEqual
+    },
+    {
+        title: 'Period Start',
+        path: 'period.start',
+        validate: validateEqual,
+        transform: transformEpochSecondsToDate
+    },
+    {
+        title: 'Period End',
+        path: 'period.end',
+        validate: validateEqual,
+        transform: transformEpochSecondsToDate
+    }
+];
+
 // Helper function to get nested object value
-function getNestedValue(obj: any, path: string): any {
-    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+function getNestedValue(obj: any, field: FieldDefinition): any {
+    let rawValue = field.path.split('.').reduce((acc, part) => acc && acc[part], obj);
+
+    if (field.fieldValueAccumulator) {
+        return field.fieldValueAccumulator(rawValue);
+    }
+
+    return rawValue;
 }
 
 // Helper function to get validation result
@@ -201,15 +290,29 @@ export class SummaryGenerator {
         let validationRow: string[] = [];
 
         // For each field, create four rows: title, original value, migrated value, and validation result
-        FIELDS_TO_COMPARE.forEach(field => {
-            const originalValue = getNestedValue(originalInvoice, field.path);
-            const migratedValue = getNestedValue(migratedInvoice, field.path);
+        TOP_LEVEL_FIELDS_TO_COMPARE.forEach(field => {
+            const originalValue = getNestedValue(originalInvoice, field);
+            const migratedValue = getNestedValue(migratedInvoice, field);
             const validationResult = getValidationResult(field, originalValue, migratedValue);
 
             headerRow.push(field.title);
             originalRow.push(getTransformedValue(field, originalValue));
             migratedRow.push(getTransformedValue(field, migratedValue));
             validationRow.push(validationResult);
+        });
+
+        originalInvoice.lines.data.forEach((lineItem, index) => {
+            LINE_ITEM_FIELDS_TO_COMPARE.forEach(field => {
+                let originalValue = getNestedValue(lineItem, field);
+                let migratedValue = getNestedValue(migratedInvoice.lines.data[index], field);
+
+                const validationResult = getValidationResult(field, originalValue, migratedValue);
+
+                headerRow.push(`Line Item ${index} - ${field.title}`);
+                originalRow.push(getTransformedValue(field, originalValue));
+                migratedRow.push(getTransformedValue(field, migratedValue));
+                validationRow.push(validationResult);
+            });
         });
 
         const fileContent = [headerRow.join(','), originalRow.join(','), migratedRow.join(','), validationRow.join(',')].join('\n');

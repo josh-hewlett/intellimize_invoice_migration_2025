@@ -92,35 +92,6 @@ async function migrateInvoices(): Promise<void> {
     console.log('Invoice migration completed');
 }
 
-/**
- * Determine if an invoice should be migrated based on business criteria
- */
-function shouldMigrateInvoice(invoice: Stripe.Invoice): boolean {
-    // Implement your filtering criteria here
-    // For example:
-
-    // Only migrate paid invoices
-    if (!invoice.paid) {
-        return false;
-    }
-
-    // Only migrate invoices from a certain date range
-    const invoiceDate = new Date(invoice.created * 1000);
-    const cutoffDate = new Date('2023-01-01'); // Example cutoff date
-    if (invoiceDate < cutoffDate) {
-        return false;
-    }
-
-    // Only migrate invoices with a minimum amount
-    if (invoice.amount_paid < 100) { // Amount in cents
-        return false;
-    }
-
-    // Add more criteria as needed
-
-    return true;
-}
-
 // Execute the migration
 migrateInvoices()
     .then(() => {
