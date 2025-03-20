@@ -8,10 +8,16 @@ type MigrationRecord = {
     migrated: Stripe.Invoice;
 }
 
+type FailedMigrationRecord = {
+    originalInvoice: Stripe.Invoice;
+    error: Error;
+}
+
 export class MigrationResultsRecorder {
 
     private static instance: MigrationResultsRecorder;
     private results: MigrationRecord[] = [];
+    private failedResults: FailedMigrationRecord[] = [];
 
     private constructor() {
     }
@@ -30,18 +36,26 @@ export class MigrationResultsRecorder {
         this.results.push({ original, migrated });
     }
 
+    recordFailedMigrationResult(original: Stripe.Invoice, error: Error): void {
+        this.failedResults.push({ originalInvoice: original, error });
+    }
+
     writeResultsToFiles(outputDirectory: string): void {
 
         for (const result of this.results) {
 
             // Create the customer directory and the original and migrated invoices files
-            const customerOriginalInvoicesPath = path.join(outputDirectory, `${result.original.id}.original.json`);
-            const customerMigratedInvoicesPath = path.join(outputDirectory, `${result.original.id}.migrated.json`);
+            const originalInvoicesPath = path.join(outputDirectory, `${result.original.id}.original.json`);
+            const migratedInvoicesPath = path.join(outputDirectory, `${result.original.id}.migrated.json`);
 
             // Write the original and migrated invoices to the customer directory
-            FileManager.writeToFile(customerOriginalInvoicesPath, result.original);
-            FileManager.writeToFile(customerMigratedInvoicesPath, result.migrated);
+            FileManager.writeToFile(originalInvoicesPath, result.original);
+            FileManager.writeToFile(migratedInvoicesPath, result.migrated);
         }
+
+        // write all errors to a file
+        const errorsPath = path.join(outputDirectory, `errors.json`);
+        FileManager.writeToFile(errorsPath, this.failedResults);
     }
 
     generateSummaryReport(outputDirectory: string): void {

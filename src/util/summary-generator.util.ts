@@ -1,11 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
 import Stripe from 'stripe';
 import { FileManager } from './file-manager.util';
-// Global configuration
-const CSV_FILENAME = 'stripe_invoice_comparison.csv';
-const CSV_PATH = path.join(process.cwd(), 'output', CSV_FILENAME);
 
 /*
  * Validators
@@ -222,6 +216,7 @@ const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Total Tax Amount',
         path: 'taxes',
+        // Add up all the tax amounts
         fieldValueAccumulator: (value: any[]) => value.reduce((acc: number, tax: any) => acc + tax.amount, 0),
         transform: transformCurrencyValueToString,
         validate: validateEqual
@@ -229,6 +224,7 @@ const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Total Discount Amount',
         path: 'discounts',
+        // Add up all the discount amounts
         fieldValueAccumulator: (value: any[]) => value.reduce((acc: number, discount: any) => acc + discount.amount, 0),
         transform: transformCurrencyValueToString,
         validate: validateEqual
@@ -247,7 +243,12 @@ const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
     }
 ];
 
-// Helper function to get nested object value
+/**
+ * Helper function to get nested object value. Applies fieldValueAccumulator if it exists.
+ * @param obj The object to get the value from
+ * @param field The field definition
+ * @returns The nested value
+ */
 function getNestedValue(obj: any, field: FieldDefinition): any {
     let rawValue = field.path.split('.').reduce((acc, part) => acc && acc[part], obj);
 
@@ -258,22 +259,34 @@ function getNestedValue(obj: any, field: FieldDefinition): any {
     return rawValue;
 }
 
-// Helper function to get validation result
+/**
+ * Helper function to get validation result.
+ * Returns '✅' if the value is valid, '❌' if it is not, and '' if no validation is defined.
+ * @param field The field definition
+ * @param originalValue The original value
+ * @param migratedValue The migrated value
+ * @returns The validation result
+ */
 function getValidationResult(field: FieldDefinition, originalValue: any, migratedValue: any): string {
     if (!field.validate) return '';
     return field.validate(originalValue, migratedValue) ? '✅' : '❌';
 }
 
+/**
+ * Helper function to get transformed value
+ * @param field The field definition
+ * @param value The value to transform
+ * @returns The transformed value
+ */
 function getTransformedValue(field: FieldDefinition, value: any): any {
     if (!field.transform) return new String(value);
     return field.transform(value);
 }
 
-
 export class SummaryGenerator {
 
     /**
-     * Compares original and migrated Stripe invoices and writes the comparison to a CSV file
+     * Compares original and migrated Stripe invoices and writes the comparison in CSV format to the provided file ]
      * @param originalInvoice The original Stripe invoice
      * @param migratedInvoice The migrated Stripe invoice
      */
@@ -301,6 +314,7 @@ export class SummaryGenerator {
             validationRow.push(validationResult);
         });
 
+        // For each line item, add its field data to the summary
         originalInvoice.lines.data.forEach((lineItem, index) => {
             LINE_ITEM_FIELDS_TO_COMPARE.forEach(field => {
                 let originalValue = getNestedValue(lineItem, field);

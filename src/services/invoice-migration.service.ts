@@ -1,6 +1,8 @@
 import Stripe from 'stripe';
-import { testCustomerMappings } from '../mappings/mappings';
+import { migrationMappings } from '../mappings';
 import { MigrationResultsRecorder } from '../util/migration-results-recorder.util';
+import { config } from '../config/config';
+
 /**
  * Transforms an invoice to a create invoice request object
  * @param sourceInvoice - The source invoice to transform
@@ -8,16 +10,26 @@ import { MigrationResultsRecorder } from '../util/migration-results-recorder.uti
  */
 function transformInvoiceToCreateInvoiceRequestObject(sourceInvoice: Stripe.Invoice): Stripe.InvoiceCreateParams {
 
-    const destinationCustomerId = testCustomerMappings[sourceInvoice.customer as string];
+    const destinationCustomerId = migrationMappings.customerMappings[sourceInvoice.customer as string];
+    const destinationSubscriptionId = migrationMappings.subscriptionMappings[sourceInvoice.subscription as string];
 
-    // TODO:
-    // 1. Map `number` to source's number in prod
+    if (!destinationCustomerId) {
+        throw new Error(`Customer not found for invoice ${sourceInvoice.id}`);
+    }
+
+    if (!destinationSubscriptionId) {
+        throw new Error(`Subscription not found for invoice ${sourceInvoice.id}`);
+    }
+
+    const destinationInvoiceNumber: string = (config.mode === 'test' ? undefined : sourceInvoice.number) || Date.now().toString();
+
     return {
         customer: destinationCustomerId,
         auto_advance: false,
         collection_method: 'send_invoice',
+        number: destinationInvoiceNumber,
         days_until_due: 30,
-        subscription: 'sub_0R4Qjso2ZNzxqgUA6qLBd6iv',
+        subscription: destinationSubscriptionId,
         custom_fields: sourceInvoice.custom_fields || undefined,
         effective_at: sourceInvoice.effective_at || sourceInvoice.created,
         description: sourceInvoice.description || undefined,
@@ -43,11 +55,9 @@ async function transformInvoiceLineItems(sourceInvoice: Stripe.Invoice): Promise
     // TODO:
     // 1. Figure out discounts
     // 2. Confirm tax rates are migrated correctly
-    // 3. Map Price objects to migrated Price IDs
-
     const transformedLineItems: Stripe.InvoiceAddLinesParams.Line[] = sourceInvoice.lines.data.map((line) => ({
         description: line.description || '',
-        price: 'price_0R4RQdo2ZNzxqgUAdOSE9dhs',
+        price: migrationMappings.priceMappings[line.price?.id as string],
         period: {
             start: line.period?.start,
             end: line.period?.end
@@ -89,22 +99,30 @@ export class InvoiceMigrationService {
         this.migrationResultsRecorder = MigrationResultsRecorder.getInstance();
     }
 
-    async migrateInvoice(originalInvoice: Stripe.Invoice): Promise<Stripe.Invoice> {
+    async migrateInvoice(originalInvoice: Stripe.Invoice): Promise<Stripe.Invoice | null> {
 
-        let transformedInvoice = transformInvoiceToCreateInvoiceRequestObject(originalInvoice);
-        let transformedLineItems = await transformInvoiceLineItems(originalInvoice);
+        try {
+            let transformedInvoice = transformInvoiceToCreateInvoiceRequestObject(originalInvoice);
+            let transformedLineItems = await transformInvoiceLineItems(originalInvoice);
 
-        // Create the new invoice and add line items in the destination account
-        let draftMigratedInvoice = await this.destinationStripe.invoices.create(transformedInvoice);
-        draftMigratedInvoice = await this.destinationStripe.invoices.addLines(draftMigratedInvoice.id, transformedLineItems);
+            // Create the new invoice and add line items in the destination account
+            let draftMigratedInvoice = await this.destinationStripe.invoices.create(transformedInvoice);
+            draftMigratedInvoice = await this.destinationStripe.invoices.addLines(draftMigratedInvoice.id, transformedLineItems);
 
-        // Pay the invoice in the destination account
-        // let paidInvoice = await payInvoice(this.destinationStripe, draftMigratedInvoice);
-        let paidInvoice = draftMigratedInvoice;
+            // Pay the invoice in the destination account
+            // let paidInvoice = await payInvoice(this.destinationStripe, draftMigratedInvoice);
+            let paidInvoice = draftMigratedInvoice;
 
-        // Record the migration result
-        this.migrationResultsRecorder.recordMigrationResult(originalInvoice, paidInvoice);
+            // Record the migration result
+            this.migrationResultsRecorder.recordMigrationResult(originalInvoice, paidInvoice);
 
-        return paidInvoice;
+            return paidInvoice;
+        } catch (error) {
+            console.error(`Error migrating invoice ${originalInvoice.id}: ${error}`);
+
+            this.migrationResultsRecorder.recordFailedMigrationResult(originalInvoice, error as Error);
+
+            return null;
+        }
     }
 }

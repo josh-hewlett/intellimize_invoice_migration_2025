@@ -1,3 +1,5 @@
+import { MigrationMappings } from "./types.mapping";
+
 const productMappings: Record<string, string> = {
     'prod_QwkajdcCUzA5ZZ': 'prod_Qrm873t8MImCM8',
     'prod_QiPqHYIpVk540D': 'prod_QvXCNxgJSFZkwF',
@@ -75,13 +77,14 @@ const testCustomerMappings: Record<string, string> = {
     'cus_Rnuw8mskNlx5cN': 'cus_RvnlTO88Ymdhnv'
 };
 
-/*
- * TODO: Add mappings for Subscription IDs and Price IDs
- */
-
-const pricePlanIdMappings: Record<string, string> = {
+const priceMappings: Record<string, string> = {
 }
 
-const subscriptionIdMappings: Record<string, string> = { }
+const subscriptionMappings: Record<string, string> = { }
 
-export { productMappings, customerMappings, testCustomerMappings };
+export const migrationMappings: MigrationMappings = {
+    customerMappings,
+    productMappings,
+    priceMappings,
+    subscriptionMappings
+}

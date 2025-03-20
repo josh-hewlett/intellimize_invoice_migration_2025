@@ -21,3 +21,6 @@ build/
 *.swp
 *.swo
 .DS_Store
+
+# Output directory
+results/
