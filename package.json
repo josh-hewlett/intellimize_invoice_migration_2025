@@ -16,11 +16,13 @@
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/yargs": "^17.0.33",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
     "dotenv": "^16.4.7",
-    "stripe": "^17.7.0"
+    "stripe": "^17.7.0",
+    "yargs": "^17.7.2"
   }
 }

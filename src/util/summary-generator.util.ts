@@ -1,31 +1,32 @@
 import Stripe from 'stripe';
 import { FileManager } from './file-manager.util';
+import { migrationMappings } from '../mappings';
 
 /*
- * Validators
+ * Field Validators
  */
 function validateEqual(original: any, migrated: any): boolean {
     return original === migrated;
 }
 
-function validatePriceMapping(original: any, migrated: any): boolean {
-    // TODO: Implement price mapping validation
-    return true;
+function validatePriceMapping(original: string, migrated: string): boolean {
+
+    return migrated === migrationMappings.priceMappings[original];
 }
 
-function validateProductMapping(original: any, migrated: any): boolean {
-    // TODO: Implement product mapping validation
-    return true;
+function validateProductMapping(original: string, migrated: string): boolean {
+
+    return migrated === migrationMappings.productMappings[original];
 }
 
-function validateSubscriptionMapping(original: any, migrated: any): boolean {
-    // TODO: Implement subscription mapping validation
-    return true;
+function validateSubscriptionMapping(original: string, migrated: string): boolean {
+
+    return migrated === migrationMappings.subscriptionMappings[original];
 }
 
-function validateCustomerMapping(original: any, migrated: any): boolean {
-    // TODO: Implement customer mapping validation
-    return true;
+function validateCustomerMapping(original: string, migrated: string): boolean {
+
+    return migrated === migrationMappings.customerMappings[original];
 }
 
 /*
@@ -62,11 +63,12 @@ const TOP_LEVEL_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Invoice Number',
         path: 'number',
-        validate: validateEqual
+        validate: (original: string, migrated: string) => migrated.startsWith(original)
     },
     {
         title: 'Customer ID',
-        path: 'customer' // Add customer mapping validation
+        path: 'customer',
+        validate: validateCustomerMapping
     },
     {
         title: 'Customer Name',
@@ -76,7 +78,7 @@ const TOP_LEVEL_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Subscription ID',
         path: 'subscription',
-        validate: (original, migrated) => true // TODO: Add validation with mappers
+        validate: validateSubscriptionMapping
     },
     {
         title: 'Status',

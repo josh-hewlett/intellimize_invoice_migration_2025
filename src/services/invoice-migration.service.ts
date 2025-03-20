@@ -1,12 +1,12 @@
-import Stripe from 'stripe';
+import Stripe from 'stripe'; // TODO: Update to stripe-acacia if executing in Webflow monorepo
 import { migrationMappings } from '../mappings';
 import { MigrationResultsRecorder } from '../util/migration-results-recorder.util';
-import { config } from '../config/config';
+import { executionControl } from '../config/execution-control.config';
 
 /**
- * Transforms an invoice to a create invoice request object
+ * Transforms an invoice to a create invoice request object.
  * @param sourceInvoice - The source invoice to transform
- * @returns The transformed invoice create request object
+ * @returns The request object to create the invoice
  */
 function transformInvoiceToCreateInvoiceRequestObject(sourceInvoice: Stripe.Invoice): Stripe.InvoiceCreateParams {
 
@@ -14,14 +14,15 @@ function transformInvoiceToCreateInvoiceRequestObject(sourceInvoice: Stripe.Invo
     const destinationSubscriptionId = migrationMappings.subscriptionMappings[sourceInvoice.subscription as string];
 
     if (!destinationCustomerId) {
-        throw new Error(`Customer not found for invoice ${sourceInvoice.id}`);
+        throw new Error(`Destination customer not found for invoice ${sourceInvoice.id}`);
     }
 
     if (!destinationSubscriptionId) {
-        throw new Error(`Subscription not found for invoice ${sourceInvoice.id}`);
+        throw new Error(`Destination subscription not found for invoice ${sourceInvoice.id}`);
     }
 
-    const destinationInvoiceNumber: string = (config.mode === 'test' ? undefined : sourceInvoice.number) || Date.now().toString();
+    let destinationInvoiceNumber: string = (sourceInvoice.number || 'inv') + '-' + Date.now().toString();
+    destinationInvoiceNumber = destinationInvoiceNumber.substring(0, 26);
 
     return {
         customer: destinationCustomerId,
@@ -50,11 +51,22 @@ function transformInvoiceToCreateInvoiceRequestObject(sourceInvoice: Stripe.Invo
     };
 }
 
+/**
+ * Transforms an invoice line items to a create invoice line items request object.
+ * @param sourceInvoice - The source invoice to transform
+ * @returns The request object to create the invoice line items
+ */
 async function transformInvoiceLineItems(sourceInvoice: Stripe.Invoice): Promise<Stripe.InvoiceAddLinesParams> {
 
-    // TODO:
-    // 1. Figure out discounts
-    // 2. Confirm tax rates are migrated correctly
+    const missingPriceMappings: string[] = sourceInvoice.lines.data
+        .map((line) => line.price?.id as string)
+        .filter((priceId) => !migrationMappings.priceMappings[priceId]);
+
+    if (missingPriceMappings.length > 0) {
+        throw new Error(`Missing price mappings for source invoice ${sourceInvoice.id}: ${missingPriceMappings.join(', ')}`);
+    }
+
+    // TODO: Confirm discounted invoices can be migrated manually
     const transformedLineItems: Stripe.InvoiceAddLinesParams.Line[] = sourceInvoice.lines.data.map((line) => ({
         description: line.description || '',
         price: migrationMappings.priceMappings[line.price?.id as string],
@@ -69,6 +81,12 @@ async function transformInvoiceLineItems(sourceInvoice: Stripe.Invoice): Promise
     }
 }
 
+/**
+ * Credit the customer account for an invoice amount. This is required to pay the invoice in the destination account without
+ * seeking to collect payment from the customer.
+ * @param destinationStripe - The destination Stripe client
+ * @param invoice - The invoice to credit
+ */
 async function creditCustomerAccountForInvoice(distinationStripe: Stripe, invoice: Stripe.Invoice): Promise<void> {
     await distinationStripe.customers.createBalanceTransaction(
         invoice.customer as string,
@@ -80,11 +98,46 @@ async function creditCustomerAccountForInvoice(distinationStripe: Stripe, invoic
     );
 }
 
-async function payInvoice(distinationStripe: Stripe, invoice: Stripe.Invoice): Promise<Stripe.Invoice> {
-    await creditCustomerAccountForInvoice(distinationStripe, invoice);
-    return await distinationStripe.invoices.pay(invoice.id, {
+/**
+ * Pays an invoice.
+ * @param destinationStripe - The destination Stripe client
+ * @param invoice - The invoice to pay
+ * @returns The paid invoice
+ */
+async function payInvoice(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<Stripe.Invoice> {
+    await creditCustomerAccountForInvoice(destinationStripe, invoice);
+    return await destinationStripe.invoices.pay(invoice.id, {
         paid_out_of_band: true
     });
+}
+
+/**
+ * Voids a draft invoice. This is only done in dry runs.
+ * @param destinationStripe - The destination Stripe client
+ * @param invoice - The invoice to void
+ */
+async function voidDraftInvoice(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<void> {
+    // Finalize the invoice to make it eligible for voiding
+    await destinationStripe.invoices.finalizeInvoice(invoice.id, { auto_advance: false });
+    await destinationStripe.invoices.voidInvoice(invoice.id);
+}
+
+/**
+ * Determines if an invoice should be migrated. Only paid invoices with no discounts are migrated.
+ * @param invoice - The invoice to check
+ * @returns True if the invoice should be migrated, false otherwise
+ */
+function shouldMigrateInvoice(invoice: Stripe.Invoice): boolean {
+
+    if (invoice.status !== 'paid') {
+        return false;
+    }
+
+    if (invoice.discounts?.length > 0) {
+        return false;
+    }
+
+    return true;
 }
 
 export class InvoiceMigrationService {
@@ -106,23 +159,60 @@ export class InvoiceMigrationService {
             let transformedLineItems = await transformInvoiceLineItems(originalInvoice);
 
             // Create the new invoice and add line items in the destination account
-            let draftMigratedInvoice = await this.destinationStripe.invoices.create(transformedInvoice);
-            draftMigratedInvoice = await this.destinationStripe.invoices.addLines(draftMigratedInvoice.id, transformedLineItems);
+            let migratedInvoice: Stripe.Invoice = await this.destinationStripe.invoices.create(transformedInvoice);
+            try {
+                migratedInvoice = await this.destinationStripe.invoices.addLines(migratedInvoice.id, transformedLineItems);
+            }
+            catch (error) {
+                // If an error occurs when adding line items to the invoice, void the invoice and throw the error
+                console.error(`Error adding line items to invoice ${migratedInvoice.id}, migrated from ${originalInvoice.id}. Voiding invoice.`);
+                this.migrationResultsRecorder.recordFailedMigrationResult(originalInvoice, error as Error);
 
-            // Pay the invoice in the destination account
-            // let paidInvoice = await payInvoice(this.destinationStripe, draftMigratedInvoice);
-            let paidInvoice = draftMigratedInvoice;
+                await voidDraftInvoice(this.destinationStripe, migratedInvoice);
+                throw error;
+            }
+
+            // Only pay the invoice if the execution control flag is set
+            if (executionControl.shouldPayInvoices()) {
+                migratedInvoice = await payInvoice(this.destinationStripe, migratedInvoice);
+            }
 
             // Record the migration result
-            this.migrationResultsRecorder.recordMigrationResult(originalInvoice, paidInvoice);
+            this.migrationResultsRecorder.recordMigrationResult(originalInvoice, migratedInvoice);
+            console.log(`Migrated invoice ${originalInvoice.id} to ${migratedInvoice.id}`);
 
-            return paidInvoice;
+            // Void the invoice if we are not paying it in this execution
+            if (!executionControl.shouldPayInvoices()) {
+                await voidDraftInvoice(this.destinationStripe, migratedInvoice);
+                console.log(`Voided test invoice ${migratedInvoice.id} from destination account`);
+            }
+
+            return migratedInvoice;
         } catch (error) {
             console.error(`Error migrating invoice ${originalInvoice.id}: ${error}`);
 
             this.migrationResultsRecorder.recordFailedMigrationResult(originalInvoice, error as Error);
 
             return null;
+        }
+    }
+
+    async migrateAllInvoicesForCustomers(customerMappings: Record<string, string>): Promise<void> {
+        for (const [fromCustomerId, toCustomerId] of Object.entries(customerMappings)) {
+            console.log(`Migrating invoices for customer ${fromCustomerId} to ${toCustomerId}`);
+
+            const invoiceList = await this.sourceStripe.invoices.list({
+                customer: fromCustomerId,
+            });
+
+            for (const sourceInvoice of invoiceList.data) {
+                if (!shouldMigrateInvoice(sourceInvoice)) {
+                    console.log(`Skipping invoice ${sourceInvoice.id}`);
+                    continue;
+                }
+
+                await this.migrateInvoice(sourceInvoice);
+            }
         }
     }
 }
