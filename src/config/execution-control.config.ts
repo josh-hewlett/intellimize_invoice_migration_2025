@@ -3,7 +3,7 @@ import { hideBin } from 'yargs/helpers';
 
 interface ExecutionControlOptions {
     mode: 'production' | 'test';
-    shouldPayInvoices: boolean;
+    shouldFinalizeInvoices: boolean;
 }
 
 export class ExecutionControl {
@@ -18,10 +18,10 @@ export class ExecutionControl {
     private parseArguments(): ExecutionControlOptions {
         return yargs(hideBin(process.argv))
             .options({
-                shouldPayInvoices: {
+                shouldFinalizeInvoices: {
                     type: 'boolean',
                     default: false,
-                    description: 'Pay invoices after migration. This will transition the invoice to its final state.'
+                    description: 'Finalize invoices after migration. This will transition the invoice to its final state.'
                         + ' If false, the draft invoice will be voided after migration.'
                 },
                 mode: {
@@ -35,8 +35,8 @@ export class ExecutionControl {
     }
 
     // Getter methods
-    public shouldPayInvoices(): boolean {
-        return this.options.shouldPayInvoices;
+    public shouldFinalizeInvoice(): boolean {
+        return this.options.shouldFinalizeInvoices;
     }
 
     public getMode(): string {

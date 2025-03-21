@@ -122,16 +122,18 @@ async function voidDraftInvoice(destinationStripe: Stripe, invoice: Stripe.Invoi
     await destinationStripe.invoices.voidInvoice(invoice.id);
 }
 
+async function markInvoiceAsUncollectible(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<void> {
+    // Finalize the invoice to make it eligible for marking as uncollectible
+    await destinationStripe.invoices.finalizeInvoice(invoice.id, { auto_advance: false });
+    await destinationStripe.invoices.markUncollectible(invoice.id);
+}
+
 /**
  * Determines if an invoice should be migrated. Only paid invoices with no discounts are migrated.
  * @param invoice - The invoice to check
  * @returns True if the invoice should be migrated, false otherwise
  */
 function shouldMigrateInvoice(invoice: Stripe.Invoice): boolean {
-
-    if (invoice.status !== 'paid') {
-        return false;
-    }
 
     if (invoice.discounts?.length > 0) {
         return false;
@@ -173,8 +175,20 @@ export class InvoiceMigrationService {
             }
 
             // Only pay the invoice if the execution control flag is set
-            if (executionControl.shouldPayInvoices()) {
-                migratedInvoice = await payInvoice(this.destinationStripe, migratedInvoice);
+            if (executionControl.shouldFinalizeInvoice()) {
+                switch (originalInvoice.status) {
+                    case 'paid':
+                        migratedInvoice = await payInvoice(this.destinationStripe, migratedInvoice);
+                        break;
+                    case 'uncollectible':
+                        await markInvoiceAsUncollectible(this.destinationStripe, migratedInvoice);
+                        break;
+                    case 'void':
+                        await voidDraftInvoice(this.destinationStripe, migratedInvoice);
+                        break;
+                    default:
+                        throw new Error(`Unexpected invoice status: ${originalInvoice.status}`);
+                }
             }
 
             // Record the migration result
@@ -182,7 +196,7 @@ export class InvoiceMigrationService {
             console.log(`Migrated invoice ${originalInvoice.id} to ${migratedInvoice.id}`);
 
             // Void the invoice if we are not paying it in this execution
-            if (!executionControl.shouldPayInvoices()) {
+            if (!executionControl.shouldFinalizeInvoice()) {
                 await voidDraftInvoice(this.destinationStripe, migratedInvoice);
                 console.log(`Voided test invoice ${migratedInvoice.id} from destination account`);
             }
