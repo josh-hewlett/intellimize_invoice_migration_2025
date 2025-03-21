@@ -334,6 +334,6 @@ export class SummaryGenerator {
         const fileContent = [headerRow.join(','), originalRow.join(','), migratedRow.join(','), validationRow.join(',')].join('\n');
 
         // Write rows to CSV file
-        FileManager.appendToFile(fileName, fileContent + '\n\n');
+        FileManager.appendToFile(fileName, fileContent + '\n\n\n');
     }
 }
