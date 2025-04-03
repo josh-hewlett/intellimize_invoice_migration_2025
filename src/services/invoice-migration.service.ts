@@ -231,6 +231,14 @@ export class InvoiceMigrationService {
         this.migrationResultsRecorder = MigrationResultsRecorder.getInstance();
     }
 
+    async testConnection(): Promise<void> {
+        const sourceInvoices = await this.sourceStripe.invoices.list();
+        console.log("Source connection successful. Found", sourceInvoices.data.length, "invoices.");
+
+        const destinationInvoices = await this.destinationStripe.invoices.list();
+        console.log("Destination connection successful. Found", destinationInvoices.data.length, "invoices.");
+    }
+
     async migrateInvoice(
         originalInvoice: Stripe.Invoice
     ): Promise<Stripe.Invoice | null> {

@@ -1,11 +1,10 @@
 import { logger, FileManager, MigrationResultsRecorder } from './util';
 
-logger.info('Starting migration');
 import path from 'path';
 import { InvoiceMigrationService } from './services/invoice-migration.service';
 import config from './config/config';
 import { migrationMappings } from './mappings';
-import os from 'os';
+import { executionControl } from './config/execution-control.config';
 
 /*
  * Define the output directories
@@ -19,7 +18,6 @@ import os from 'os';
  *       |- ${invoice_id}.migrated.json (contains the migrated invoice object)
  *       |- ...
  */
-logger.info('Starting migration');
 const REPORT_OUTPUT_DIR = path.join(
     process.cwd(),
     'stripe_intellimize_invoice_migration_results'
@@ -34,28 +32,33 @@ const invoiceMigrationService = new InvoiceMigrationService(
 );
 const migrationResultsRecorder = MigrationResultsRecorder.getInstance();
 
-console.log(migrationMappings);
 // Execute the migration
-invoiceMigrationService
-    .migrateAllInvoicesForCustomers(migrationMappings.customerMappings)
-    .then(() => {
-        logger.info('Migration completed successfully');
+if (executionControl.isTestConnectionRun()) {
+    invoiceMigrationService.testConnection();
+} else {
+    logger.info('Starting migration');
+    invoiceMigrationService
+        .migrateAllInvoicesForCustomers(migrationMappings.customerMappings)
+        .then(() => {
+            logger.info('Migration completed successfully');
+        })
+        .catch((error) => {
+            logger.error('Migration failed:', error);
+            const fatalErrorFile = FileManager.initializeFile(
+                ERROR_OUTPUT_DIR,
+                `fatal_error_${Date.now()}.json`
+            );
+            FileManager.writeToFile(fatalErrorFile, {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+            throw new Error('Migration failed: ' + error);
+        })
+        .finally(() => {
+            logger.info('Writing results to:', RESULTS_OUTPUT_DIR);
+            migrationResultsRecorder.writeResultsToFiles(RESULTS_OUTPUT_DIR);
 
-        logger.info('Writing results to:', RESULTS_OUTPUT_DIR);
-        migrationResultsRecorder.writeResultsToFiles(RESULTS_OUTPUT_DIR);
-
-        logger.info('Writing summary to:', REPORT_OUTPUT_DIR);
-        migrationResultsRecorder.generateSummaryReport(REPORT_OUTPUT_DIR);
-    })
-    .catch((error) => {
-        logger.error('Migration failed:', error);
-        const fatalErrorFile = FileManager.initializeFile(
-            ERROR_OUTPUT_DIR,
-            `fatal_error_${Date.now()}.json`
-        );
-        FileManager.writeToFile(fatalErrorFile, {
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
+            logger.info('Writing summary to:', REPORT_OUTPUT_DIR);
+            migrationResultsRecorder.generateSummaryReport(REPORT_OUTPUT_DIR);
         });
-        throw new Error('Migration failed: ' + error);
-    });
+}

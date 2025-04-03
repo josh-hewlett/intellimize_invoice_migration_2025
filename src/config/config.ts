@@ -19,8 +19,8 @@ switch (executionControl.getMode()) {
         break;
     case 'production':
         config = {
-            sourceStripeApiKey: process.env.SOURCE_STRIPE_API_KEY || '',
-            destinationStripeApiKey: process.env.DESTINATION_STRIPE_API_KEY || '',
+            sourceStripeApiKey: process.env.PRODUCTION_SOURCE_STRIPE_API_KEY || '',
+            destinationStripeApiKey: process.env.PRODUCTION_DESTINATION_STRIPE_API_KEY || '',
         };
         break;
     default:

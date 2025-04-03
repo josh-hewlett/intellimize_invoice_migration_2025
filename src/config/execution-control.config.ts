@@ -5,6 +5,7 @@ interface ExecutionControlOptions {
     mode: 'production' | 'test';
     shouldFinalizeInvoices: boolean;
     addArrExclusionMetadata: boolean;
+    testConnection: boolean;
 }
 
 export class ExecutionControl {
@@ -39,6 +40,11 @@ export class ExecutionControl {
                         'Add metadata field to ensure migrated invoice is excluded from ARR calculation pipeline.' +
                         ' This is useful for validating the finalized migrated invoices before "real" wet run.',
                 },
+                testConnection: {
+                    type: 'boolean',
+                    default: false,
+                    description: 'Test the connection to the source and destination Stripe accounts.',
+                },
             })
             .help()
             .version(false).argv as ExecutionControlOptions;
@@ -55,6 +61,10 @@ export class ExecutionControl {
 
     public shouldAddArrExclusionMetadata(): boolean {
         return this.options.addArrExclusionMetadata;
+    }
+
+    public isTestConnectionRun(): boolean {
+        return this.options.testConnection;
     }
 }
 
