@@ -1,5 +1,6 @@
+// @ts-ignore Needed due to moduleResolution Node vs Bundler
 import Stripe from 'stripe';
-import { FileManager } from './file-manager.util';
+import { FileManager } from '.';
 import { migrationMappings } from '../mappings';
 
 /*
@@ -10,22 +11,21 @@ function validateEqual(original: any, migrated: any): boolean {
 }
 
 function validatePriceMapping(original: string, migrated: string): boolean {
-
     return migrated === migrationMappings.priceMappings[original];
 }
 
 function validateProductMapping(original: string, migrated: string): boolean {
-
     return migrated === migrationMappings.productMappings[original];
 }
 
-function validateSubscriptionMapping(original: string, migrated: string): boolean {
-
+function validateSubscriptionMapping(
+    original: string,
+    migrated: string
+): boolean {
     return migrated === migrationMappings.subscriptionMappings[original];
 }
 
 function validateCustomerMapping(original: string, migrated: string): boolean {
-
     return migrated === migrationMappings.customerMappings[original];
 }
 
@@ -58,196 +58,203 @@ type FieldDefinition = {
 const TOP_LEVEL_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'Invoice ID',
-        path: 'id'
+        path: 'id',
     },
     {
         title: 'Invoice Number',
         path: 'number',
-        validate: (original: string, migrated: string) => migrated.startsWith(original)
+        validate: (original: string, migrated: string) =>
+            migrated.startsWith(original),
     },
     {
         title: 'Customer ID',
         path: 'customer',
-        validate: validateCustomerMapping
+        validate: validateCustomerMapping,
     },
     {
         title: 'Customer Name',
         path: 'customer_name',
-        validate: (original, migrated) => original === migrated
+        validate: (original, migrated) => original === migrated,
     },
     {
         title: 'Subscription ID',
         path: 'subscription',
-        validate: validateSubscriptionMapping
+        validate: validateSubscriptionMapping,
     },
     {
         title: 'Status',
         path: 'status',
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Total',
         path: 'total',
         validate: validateEqual,
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Currency',
         path: 'currency',
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Subtotal',
         path: 'subtotal',
         validate: validateEqual,
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Subtotal Excluding Tax',
         path: 'subtotal_excluding_tax',
         validate: validateEqual,
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Taxes',
         path: 'tax',
         validate: validateEqual,
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Discount',
         path: 'discount',
         validate: validateEqual,
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Effective At',
         path: 'effective_at',
-        transform: transformEpochSecondsToDate
+        transform: transformEpochSecondsToDate,
     },
     {
         title: 'Created Date',
         path: 'created',
-        transform: transformEpochSecondsToDate
+        transform: transformEpochSecondsToDate,
     },
     {
         title: 'Due Date',
         path: 'due_date',
-        transform: transformEpochSecondsToDate
+        transform: transformEpochSecondsToDate,
     },
     {
         title: 'Period Start',
         path: 'period_start',
-        transform: transformEpochSecondsToDate
+        transform: transformEpochSecondsToDate,
     },
     {
         title: 'Period End',
         path: 'period_end',
-        transform: transformEpochSecondsToDate
+        transform: transformEpochSecondsToDate,
     },
     {
         title: 'Amount Due',
         path: 'amount_due',
         validate: validateEqual,
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Amount Paid',
         path: 'amount_paid',
-        transform: transformCurrencyValueToString
+        transform: transformCurrencyValueToString,
     },
     {
         title: 'Collection Method',
         path: 'collection_method',
-        validate: (_original, migrated) => migrated === 'send_invoice'
+        validate: (_original, migrated) => migrated === 'send_invoice',
     },
     {
         title: 'Paid out of band',
         path: 'paid_out_of_band',
-        validate: (_original, migrated) => migrated
+        validate: (_original, migrated) => migrated,
     },
     {
         title: 'Description',
         path: 'description',
-        validate: (original, migrated) => original === migrated
+        validate: (original, migrated) => original === migrated,
     },
     {
         title: 'Metadata',
         path: 'metadata',
         // transform metadata to a string of key=value pairs separated by | and remove commas (because CSV...)
-        transform: (value: any) => Object.entries(value).map(([key, value]) => `${key}=${value}`).join('|').replace(/,/g, '')
-    }
+        transform: (value: any) =>
+            Object.entries(value)
+                .map(([key, val]) => `${key}=${val}`)
+                .join('|')
+                .replace(/,/g, ''),
+    },
 ];
 
 const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
     {
         title: 'ID',
-        path: 'id'
+        path: 'id',
     },
     {
         title: 'Description',
-        path: 'description'
+        path: 'description',
     },
     {
         title: 'Type',
         path: 'type',
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Price ID',
         path: 'price.id',
-        validate: validatePriceMapping
+        validate: validatePriceMapping,
     },
     {
         title: 'Product ID',
         path: 'price.product',
-        validate: validateProductMapping
+        validate: validateProductMapping,
     },
     {
         title: 'Amount',
         path: 'amount',
         transform: transformCurrencyValueToString,
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Quantity',
         path: 'quantity',
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Price Unit Amount',
         path: 'price.unit_amount',
         transform: transformCurrencyValueToString,
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Total Tax Amount',
         path: 'taxes',
         // Add up all the tax amounts
-        fieldValueAccumulator: (value: any[]) => value.reduce((acc: number, tax: any) => acc + tax.amount, 0),
+        fieldValueAccumulator: (value: any[]) =>
+            value.reduce((acc: number, tax: any) => acc + tax.amount, 0),
         transform: transformCurrencyValueToString,
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Total Discount Amount',
         path: 'discounts',
         // Add up all the discount amounts
-        fieldValueAccumulator: (value: any[]) => value.reduce((acc: number, discount: any) => acc + discount.amount, 0),
+        fieldValueAccumulator: (value: any[]) =>
+            value.reduce((acc: number, discount: any) => acc + discount.amount, 0),
         transform: transformCurrencyValueToString,
-        validate: validateEqual
+        validate: validateEqual,
     },
     {
         title: 'Period Start',
         path: 'period.start',
         validate: validateEqual,
-        transform: transformEpochSecondsToDate
+        transform: transformEpochSecondsToDate,
     },
     {
         title: 'Period End',
         path: 'period.end',
         validate: validateEqual,
-        transform: transformEpochSecondsToDate
-    }
+        transform: transformEpochSecondsToDate,
+    },
 ];
 
 /**
@@ -257,7 +264,9 @@ const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
  * @returns The nested value
  */
 function getNestedValue(obj: any, field: FieldDefinition): any {
-    let rawValue = field.path.split('.').reduce((acc, part) => acc && acc[part], obj);
+    const rawValue = field.path
+        .split('.')
+        .reduce((acc, part) => acc && acc[part], obj);
 
     if (field.fieldValueAccumulator) {
         return field.fieldValueAccumulator(rawValue);
@@ -274,8 +283,14 @@ function getNestedValue(obj: any, field: FieldDefinition): any {
  * @param migratedValue The migrated value
  * @returns The validation result
  */
-function getValidationResult(field: FieldDefinition, originalValue: any, migratedValue: any): string {
-    if (!field.validate) return '';
+function getValidationResult(
+    field: FieldDefinition,
+    originalValue: any,
+    migratedValue: any
+): string {
+    if (!field.validate) {
+        return '';
+    }
     return field.validate(originalValue, migratedValue) ? '✅' : '❌';
 }
 
@@ -286,12 +301,13 @@ function getValidationResult(field: FieldDefinition, originalValue: any, migrate
  * @returns The transformed value
  */
 function getTransformedValue(field: FieldDefinition, value: any): any {
-    if (!field.transform) return new String(value);
+    if (!field.transform) {
+        return `${value}`;
+    }
     return field.transform(value);
 }
 
 export class SummaryGenerator {
-
     /**
      * Compares original and migrated Stripe invoices and writes the comparison in CSV format to the provided file ]
      * @param originalInvoice The original Stripe invoice
@@ -302,18 +318,21 @@ export class SummaryGenerator {
         originalInvoice: Stripe.Invoice,
         migratedInvoice: Stripe.Invoice
     ): void {
-
         // Prepare CSV rows
-        let headerRow: string[] = [];
-        let originalRow: string[] = [];
-        let migratedRow: string[] = [];
-        let validationRow: string[] = [];
+        const headerRow: string[] = [];
+        const originalRow: string[] = [];
+        const migratedRow: string[] = [];
+        const validationRow: string[] = [];
 
         // For each field, create four rows: title, original value, migrated value, and validation result
-        TOP_LEVEL_FIELDS_TO_COMPARE.forEach(field => {
+        TOP_LEVEL_FIELDS_TO_COMPARE.forEach((field) => {
             const originalValue = getNestedValue(originalInvoice, field);
             const migratedValue = getNestedValue(migratedInvoice, field);
-            const validationResult = getValidationResult(field, originalValue, migratedValue);
+            const validationResult = getValidationResult(
+                field,
+                originalValue,
+                migratedValue
+            );
 
             headerRow.push(field.title);
             originalRow.push(getTransformedValue(field, originalValue));
@@ -322,12 +341,19 @@ export class SummaryGenerator {
         });
 
         // For each line item, add its field data to the summary
-        originalInvoice.lines.data.forEach((lineItem, index) => {
-            LINE_ITEM_FIELDS_TO_COMPARE.forEach(field => {
-                let originalValue = getNestedValue(lineItem, field);
-                let migratedValue = getNestedValue(migratedInvoice.lines.data[index], field);
+        originalInvoice.lines.data.forEach((lineItem: any, index: number) => {
+            LINE_ITEM_FIELDS_TO_COMPARE.forEach((field) => {
+                const originalValue = getNestedValue(lineItem, field);
+                const migratedValue = getNestedValue(
+                    migratedInvoice.lines.data[index],
+                    field
+                );
 
-                const validationResult = getValidationResult(field, originalValue, migratedValue);
+                const validationResult = getValidationResult(
+                    field,
+                    originalValue,
+                    migratedValue
+                );
 
                 headerRow.push(`Line Item ${index} - ${field.title}`);
                 originalRow.push(getTransformedValue(field, originalValue));
@@ -336,7 +362,12 @@ export class SummaryGenerator {
             });
         });
 
-        const fileContent = [headerRow.join(','), originalRow.join(','), migratedRow.join(','), validationRow.join(',')].join('\n');
+        const fileContent = [
+            headerRow.join(','),
+            originalRow.join(','),
+            migratedRow.join(','),
+            validationRow.join(','),
+        ].join('\n');
 
         // Write rows to CSV file
         FileManager.appendToFile(fileName, fileContent + '\n\n\n');

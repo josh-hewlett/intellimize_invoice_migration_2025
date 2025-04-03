@@ -1,9 +1,11 @@
+import { logger, FileManager, MigrationResultsRecorder } from './util';
+
+logger.info('Starting migration');
 import path from 'path';
-import { FileManager } from './util/file-manager.util';
 import { InvoiceMigrationService } from './services/invoice-migration.service';
-import { MigrationResultsRecorder } from './util/migration-results-recorder.util';
-import { config } from './config/config';
+import config from './config/config';
 import { migrationMappings } from './mappings';
+import os from 'os';
 
 /*
  * Define the output directories
@@ -17,34 +19,43 @@ import { migrationMappings } from './mappings';
  *       |- ${invoice_id}.migrated.json (contains the migrated invoice object)
  *       |- ...
  */
-const REPORT_OUTPUT_DIR = path.join(__dirname, '..', 'results');
+logger.info('Starting migration');
+const REPORT_OUTPUT_DIR = path.join(
+    process.cwd(),
+    'stripe_intellimize_invoice_migration_results'
+);
 const RESULTS_OUTPUT_DIR = path.join(REPORT_OUTPUT_DIR, 'details');
 const ERROR_OUTPUT_DIR = path.join(REPORT_OUTPUT_DIR, 'errors');
 
 // Initialize the invoice migration service and migration results recorder
-const invoiceMigrationService = new InvoiceMigrationService(config.sourceStripeApiKey, config.destinationStripeApiKey);
-let migrationResultsRecorder = MigrationResultsRecorder.getInstance();
+const invoiceMigrationService = new InvoiceMigrationService(
+    config.sourceStripeApiKey,
+    config.destinationStripeApiKey
+);
+const migrationResultsRecorder = MigrationResultsRecorder.getInstance();
 
+console.log(migrationMappings);
 // Execute the migration
 invoiceMigrationService
     .migrateAllInvoicesForCustomers(migrationMappings.customerMappings)
     .then(() => {
-        console.log('Migration completed successfully');
+        logger.info('Migration completed successfully');
 
-        console.log('Writing results to:', RESULTS_OUTPUT_DIR);
+        logger.info('Writing results to:', RESULTS_OUTPUT_DIR);
         migrationResultsRecorder.writeResultsToFiles(RESULTS_OUTPUT_DIR);
 
-        console.log('Writing summary to:', REPORT_OUTPUT_DIR);
+        logger.info('Writing summary to:', REPORT_OUTPUT_DIR);
         migrationResultsRecorder.generateSummaryReport(REPORT_OUTPUT_DIR);
-
-        process.exit(0);
     })
     .catch((error) => {
-        console.error('Migration failed:', error);
-        const fatalErrorFile = FileManager.initializeFile(ERROR_OUTPUT_DIR, `fatal_error_${Date.now()}.json`);
+        logger.error('Migration failed:', error);
+        const fatalErrorFile = FileManager.initializeFile(
+            ERROR_OUTPUT_DIR,
+            `fatal_error_${Date.now()}.json`
+        );
         FileManager.writeToFile(fatalErrorFile, {
             error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined
+            stack: error instanceof Error ? error.stack : undefined,
         });
-        process.exit(1);
+        throw new Error('Migration failed: ' + error);
     });

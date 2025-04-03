@@ -1,26 +1,24 @@
+// @ts-ignore Needed due to moduleResolution Node vs Bundler
 import Stripe from 'stripe';
-import { FileManager } from './file-manager.util';
+import { FileManager, SummaryGenerator } from '.';
 import path from 'path';
-import { SummaryGenerator } from './summary-generator.util';
 
 type MigrationRecord = {
     original: Stripe.Invoice;
     migrated: Stripe.Invoice;
-}
+};
 
 type FailedMigrationRecord = {
     originalInvoice: Stripe.Invoice;
     error: Error;
-}
+};
 
 export class MigrationResultsRecorder {
-
     private static instance: MigrationResultsRecorder;
     private results: MigrationRecord[] = [];
     private failedResults: FailedMigrationRecord[] = [];
 
-    private constructor() {
-    }
+    private constructor() { }
 
     static getInstance(): MigrationResultsRecorder {
         if (!MigrationResultsRecorder.instance) {
@@ -29,9 +27,10 @@ export class MigrationResultsRecorder {
         return MigrationResultsRecorder.instance;
     }
 
-    recordMigrationResult(original: Stripe.Invoice, migrated: Stripe.Invoice): void {
-        const customerId = original.customer as string;
-
+    recordMigrationResult(
+        original: Stripe.Invoice,
+        migrated: Stripe.Invoice
+    ): void {
         // Add the migration results to the customer results
         this.results.push({ original, migrated });
     }
@@ -41,12 +40,16 @@ export class MigrationResultsRecorder {
     }
 
     writeResultsToFiles(outputDirectory: string): void {
-
         for (const result of this.results) {
-
             // Create the customer directory and the original and migrated invoices files
-            const originalInvoicesPath = path.join(outputDirectory, `${result.original.id}.original.json`);
-            const migratedInvoicesPath = path.join(outputDirectory, `${result.original.id}.migrated.json`);
+            const originalInvoicesPath = path.join(
+                outputDirectory,
+                `${result.original.id}.original.json`
+            );
+            const migratedInvoicesPath = path.join(
+                outputDirectory,
+                `${result.original.id}.migrated.json`
+            );
 
             // Write the original and migrated invoices to the customer directory
             FileManager.writeToFile(originalInvoicesPath, result.original);
@@ -59,11 +62,17 @@ export class MigrationResultsRecorder {
     }
 
     generateSummaryReport(outputDirectory: string): void {
-
-        const comparisonFile = FileManager.initializeFile(outputDirectory, `summary_${Date.now()}.csv`);
+        const comparisonFile = FileManager.initializeFile(
+            outputDirectory,
+            `summary_${Date.now()}.csv`
+        );
 
         for (const result of this.results) {
-            SummaryGenerator.addResultToSummaryFile(comparisonFile, result.original, result.migrated);
+            SummaryGenerator.addResultToSummaryFile(
+                comparisonFile,
+                result.original,
+                result.migrated
+            );
         }
     }
 }

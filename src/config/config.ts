@@ -1,21 +1,37 @@
+import { executionControl } from './execution-control.config';
 import * as dotenv from 'dotenv';
 
-// Load the environment variables
 dotenv.config();
 
 type Config = {
     sourceStripeApiKey: string;
     destinationStripeApiKey: string;
-    outputDirectory: string;
-}
+};
 
-export const config: Config = {
-    sourceStripeApiKey: process.env.SOURCE_STRIPE_API_KEY as string,
-    destinationStripeApiKey: process.env.DESTINATION_STRIPE_API_KEY as string,
-    outputDirectory: process.env.OUTPUT_DIRECTORY as string,
+let config: Config;
+
+switch (executionControl.getMode()) {
+    case 'test':
+        config = {
+            sourceStripeApiKey: process.env.SOURCE_STRIPE_API_KEY || '',
+            destinationStripeApiKey: process.env.DESTINATION_STRIPE_API_KEY || '',
+        };
+        break;
+    case 'production':
+        config = {
+            sourceStripeApiKey: process.env.SOURCE_STRIPE_API_KEY || '',
+            destinationStripeApiKey: process.env.DESTINATION_STRIPE_API_KEY || '',
+        };
+        break;
+    default:
+        throw new Error(
+            `Unexpected value encountered for execution mode: ${executionControl.getMode()}`
+        );
 }
 
 // Validate the config
-if (!config.sourceStripeApiKey || !config.destinationStripeApiKey || !config.outputDirectory) {
+if (!config.sourceStripeApiKey || !config.destinationStripeApiKey) {
     throw new Error('Missing environment variables');
 }
+
+export default config;

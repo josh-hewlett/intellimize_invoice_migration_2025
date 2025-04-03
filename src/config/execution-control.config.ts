@@ -1,37 +1,47 @@
 import yargs from 'yargs';
-import { hideBin } from 'yargs/helpers';
+import { logger } from '../util';
 
 interface ExecutionControlOptions {
     mode: 'production' | 'test';
     shouldFinalizeInvoices: boolean;
+    addArrExclusionMetadata: boolean;
 }
 
 export class ExecutionControl {
     private options: ExecutionControlOptions;
 
     constructor() {
-        console.log('Initializing execution control');
+        logger.info('Initializing execution control');
         this.options = this.parseArguments();
-        console.log('Execution control options:', this.options);
+        logger.info('Execution control options:', this.options);
     }
 
     private parseArguments(): ExecutionControlOptions {
-        return yargs(hideBin(process.argv))
+        return yargs(process.argv.slice(2))
             .options({
                 shouldFinalizeInvoices: {
                     type: 'boolean',
                     default: false,
-                    description: 'Finalize invoices after migration. This will transition the invoice to its final state.'
-                        + ' If false, the draft invoice will be voided after migration.'
+                    description:
+                        'Finalize invoices after migration. This will transition the invoice to its final state.' +
+                        ' If false, the draft invoice will be voided after migration.',
                 },
                 mode: {
                     type: 'string',
                     choices: ['production', 'test'],
                     default: 'test',
-                    description: 'Set runtime environment'
+                    description: 'Set runtime environment',
+                },
+                addArrExclusionMetadata: {
+                    type: 'boolean',
+                    default: true,
+                    description:
+                        'Add metadata field to ensure migrated invoice is excluded from ARR calculation pipeline.' +
+                        ' This is useful for validating the finalized migrated invoices before "real" wet run.',
                 },
             })
-            .parseSync() as ExecutionControlOptions;
+            .help()
+            .version(false).argv as ExecutionControlOptions;
     }
 
     // Getter methods
@@ -39,8 +49,12 @@ export class ExecutionControl {
         return this.options.shouldFinalizeInvoices;
     }
 
-    public getMode(): string {
+    public getMode(): 'production' | 'test' {
         return this.options.mode;
+    }
+
+    public shouldAddArrExclusionMetadata(): boolean {
+        return this.options.addArrExclusionMetadata;
     }
 }
 
