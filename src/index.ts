@@ -17,7 +17,7 @@ import { migrationMappings } from './mappings';
  *       |- ${invoice_id}.migrated.json (contains the migrated invoice object)
  *       |- ...
  */
-const REPORT_OUTPUT_DIR = path.join(__dirname, '..', config.outputDirectory);
+const REPORT_OUTPUT_DIR = path.join(__dirname, '..', 'results');
 const RESULTS_OUTPUT_DIR = path.join(REPORT_OUTPUT_DIR, 'details');
 const ERROR_OUTPUT_DIR = path.join(REPORT_OUTPUT_DIR, 'errors');
 

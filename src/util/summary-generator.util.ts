@@ -189,6 +189,11 @@ const LINE_ITEM_FIELDS_TO_COMPARE: FieldDefinition[] = [
         path: 'description'
     },
     {
+        title: 'Type',
+        path: 'type',
+        validate: validateEqual
+    },
+    {
         title: 'Price ID',
         path: 'price.id',
         validate: validatePriceMapping

@@ -24,7 +24,7 @@ function transformInvoiceToCreateInvoiceRequestObject(sourceInvoice: Stripe.Invo
     let destinationInvoiceNumber: string = (sourceInvoice.number || 'inv') + '-' + Date.now().toString();
     destinationInvoiceNumber = destinationInvoiceNumber.substring(0, 26);
 
-    return {
+    let invoiceCreateParams: Stripe.InvoiceCreateParams = {
         customer: destinationCustomerId,
         auto_advance: false,
         collection_method: 'send_invoice',
@@ -49,6 +49,17 @@ function transformInvoiceToCreateInvoiceRequestObject(sourceInvoice: Stripe.Invo
             original_stripe_account: sourceInvoice.account_name as string,
         },
     };
+
+    // If we are executing a dry run, we need to exclude the invoice from ARR. This is a special metadata field that is already used to
+    // exclude invoices from ARR calculations.
+    if (!executionControl.shouldFinalizeInvoice()) {
+        invoiceCreateParams.metadata = {
+            ...invoiceCreateParams.metadata,
+            is_arr_excluded: 'true',
+        };
+    }
+
+    return invoiceCreateParams;
 }
 
 /**
@@ -66,7 +77,6 @@ async function transformInvoiceLineItems(sourceInvoice: Stripe.Invoice): Promise
         throw new Error(`Missing price mappings for source invoice ${sourceInvoice.id}: ${missingPriceMappings.join(', ')}`);
     }
 
-    // TODO: Confirm discounted invoices can be migrated manually
     const transformedLineItems: Stripe.InvoiceAddLinesParams.Line[] = sourceInvoice.lines.data.map((line) => ({
         description: line.description || '',
         price: migrationMappings.priceMappings[line.price?.id as string],
@@ -116,16 +126,20 @@ async function payInvoice(destinationStripe: Stripe, invoice: Stripe.Invoice): P
  * @param destinationStripe - The destination Stripe client
  * @param invoice - The invoice to void
  */
-async function voidDraftInvoice(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<void> {
+async function voidDraftInvoice(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<Stripe.Invoice> {
     // Finalize the invoice to make it eligible for voiding
     await destinationStripe.invoices.finalizeInvoice(invoice.id, { auto_advance: false });
-    await destinationStripe.invoices.voidInvoice(invoice.id);
+    return await destinationStripe.invoices.voidInvoice(invoice.id);
 }
 
-async function markInvoiceAsUncollectible(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<void> {
+async function markInvoiceAsUncollectible(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<Stripe.Invoice> {
     // Finalize the invoice to make it eligible for marking as uncollectible
     await destinationStripe.invoices.finalizeInvoice(invoice.id, { auto_advance: false });
-    await destinationStripe.invoices.markUncollectible(invoice.id);
+    return await destinationStripe.invoices.markUncollectible(invoice.id);
+}
+
+async function openInvoice(destinationStripe: Stripe, invoice: Stripe.Invoice): Promise<Stripe.Invoice> {
+    return await destinationStripe.invoices.finalizeInvoice(invoice.id, { auto_advance: false });
 }
 
 /**
@@ -176,15 +190,19 @@ export class InvoiceMigrationService {
 
             // Only pay the invoice if the execution control flag is set
             if (executionControl.shouldFinalizeInvoice()) {
+                migratedInvoice = await openInvoice(this.destinationStripe, migratedInvoice);
                 switch (originalInvoice.status) {
                     case 'paid':
                         migratedInvoice = await payInvoice(this.destinationStripe, migratedInvoice);
                         break;
                     case 'uncollectible':
-                        await markInvoiceAsUncollectible(this.destinationStripe, migratedInvoice);
+                        migratedInvoice = await markInvoiceAsUncollectible(this.destinationStripe, migratedInvoice);
                         break;
                     case 'void':
-                        await voidDraftInvoice(this.destinationStripe, migratedInvoice);
+                        migratedInvoice = await voidDraftInvoice(this.destinationStripe, migratedInvoice);
+                        break;
+                    case 'open':
+                        migratedInvoice = await openInvoice(this.destinationStripe, migratedInvoice);
                         break;
                     default:
                         throw new Error(`Unexpected invoice status: ${originalInvoice.status}`);
